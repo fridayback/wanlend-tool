@@ -1,0 +1,54 @@
+Arguments: 
+  /home/liulin/.nvm/versions/node/v18.16.1/bin/node /usr/bin/yarn add rc-resize-observer
+
+PATH: 
+  /home/liulin/.vscode-server/bin/f1b07bd25dfad64b0167beb15359ae573aecd2cc/bin/remote-cli:/home/liulin/.nix-profile/bin:/home/liulin/.local/bin:/home/liulin/.cabal/bin:/home/liulin/.ghcup/bin:/home/liulin/.cargo/bin:/home/liulin/.nvm/versions/node/v18.16.1/bin:~/.nix-profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files (x86)/Common Files/Oracle/Java/javapath:/mnt/c/Python27/:/mnt/c/Python27/Scripts:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/Git/cmd:/mnt/d/Go/bin:/mnt/c/ProgramData/chocolatey/bin:/mnt/d/nodejs/node_global:/mnt/d/Program Files/Redis:/mnt/d/Program Files/nodejs/:/mnt/d/nodejs/node_global/bin:/mnt/c/Program Files/dotnet/:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/ProgramData/DockerDesktop/version-bin:/mnt/c/Users/liulin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/liulin/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/liulin/go/bin:/mnt/d/Program Files/JetBrains/GoLand 2019.1/bin:/mnt/d/ghc/ghcup/bin:/mnt/d/Programs/Fiddler:/mnt/c/Users/liulin/AppData/Roaming/npm:/mnt/c/Users/liulin/AppData/Local/Microsoft/WindowsApps:/snap/bin
+
+Yarn version: 
+  1.22.17
+
+Node version: 
+  18.16.1
+
+Platform: 
+  linux x64
+
+Trace: 
+  Error: ENOENT: no such file or directory, copyfile '/home/liulin/.cache/yarn/v6/npm-globals-13.23.0-ef31673c926a0976e1f61dab4dca57e0c0a8af02-integrity/node_modules/globals/globals.json' -> '/home/liulin/wanlend/wanlend-info-show/node_modules/@eslint/eslintrc/node_modules/globals/globals.json'
+
+npm manifest: 
+  {
+    "private": true,
+    "author": "liulin <blue-sky-dl5@163.com>",
+    "scripts": {
+      "dev": "max dev",
+      "build": "max build",
+      "format": "prettier --cache --write .",
+      "prepare": "husky install",
+      "postinstall": "max setup",
+      "setup": "max setup",
+      "start": "npm run dev"
+    },
+    "dependencies": {
+      "@ant-design/icons": "^5.2.6",
+      "@ant-design/pro-components": "^2.6.34",
+      "@umijs/max": "^4.0.87",
+      "antd": "^5.10.3"
+    },
+    "devDependencies": {
+      "@types/react": "^18.2.33",
+      "@types/react-dom": "^18.2.14",
+      "husky": "^8.0.3",
+      "lint-staged": "^15.0.2",
+      "prettier": "^3.0.3",
+      "prettier-plugin-organize-imports": "^3.2.3",
+      "prettier-plugin-packagejson": "^2.4.6",
+      "typescript": "^5.2.2"
+    }
+  }
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile
