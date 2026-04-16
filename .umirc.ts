@@ -12,6 +12,11 @@ export default defineConfig({
       'changeOrigin': true,
       'pathRewrite': { '^/api' : '' },
     },
+    '/rpc': {
+      'target': 'https://nodes.wandevs.org/wan',
+      'changeOrigin': true,
+      'pathRewrite': { '^/rpc' : '' },
+    },
   },
   layout: {
     title: '@umijs/max',

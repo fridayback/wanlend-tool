@@ -10,11 +10,18 @@ import RcResizeObserver from 'rc-resize-observer';
 import MarketInfo from './components/marketInfo'
 import service from '../../../services/demo/';
 
-function getBlockNumber(): Promise<{ success: boolean, data: Object }> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ success: true, data: { blockNumber: Date.now() } });
-    }, 1000);
+import {BigNumber} from 'bignumber.js';
+
+const { Divider } = StatisticCard;
+
+function getBlockNumber(): Promise<{ success: boolean, data: { name: String }} > {
+  return new Promise(async (resolve) => {
+    // setTimeout(() => {
+    //   resolve({ success: true, data: { blockNumber: Date.now() } });
+    // }, 1000);
+    let blockNumber = await service.UserController.getBlockNumber();
+    console.log('blockNumber ====:',new BigNumber(blockNumber.result).toString(10));
+    resolve({ success: true, data: { blockNumber: new BigNumber(blockNumber.result).toString(10) } });
   });
 }
 
@@ -50,9 +57,9 @@ const MarketPage: React.FC = () => {
 
   // console.log('show Home page',id,'====',match);
   // console.log('show Market page', marketsInfo.get(id));
-  const { loading, run } = useRequest(getBlockNumber, {
-    manual: true,
-    pollingInterval: 5000,
+  const { loading, run, } = useRequest(getBlockNumber, {
+    manual: false,
+    pollingInterval: 30000,
     onSuccess: (result) => {
       setBlockNumber(result.blockNumber);
       console.log(`The blockNumber was changed to "${result.blockNumber}" at ${Date.now()}!`);
@@ -71,43 +78,17 @@ const MarketPage: React.FC = () => {
       message.error('请求失败(name)' + JSON.stringify(error) + ' ,' + JSON.stringify(params));
     }
   })
+//marketsInfo.get(id)?.reserves * (10**marketsInfo.get(id)?.underlying_decimals)
+  let reserves = marketsInfo.get(id)?.reserves;
+  if(!reserves) reserves = 0;
+  let underlying_decimals = marketsInfo.get(id)?.underlying_decimals;
+  if(!underlying_decimals) underlying_decimals = 0;
+  let cash_ = marketsInfo.get(id)?.cash;
+  if(!cash_) cash_ = 0;
+  const profit = BigNumber(reserves).shiftedBy(underlying_decimals).toString(10);
+  const cash = BigNumber(cash_).shiftedBy(underlying_decimals).toString(10)
   return (
-    <PageContainer ghost
-    // content="欢迎使用 ProLayout 组件"
-    // tabList={[
-    //   {
-    //     tab: '基本信息',
-    //     key: 'base',
-    //   },
-    //   {
-    //     tab: '用户信息',
-    //     key: 'user',
-    //   },
-    // ]}
-    // extra={[
-    //   <Button key="1" type="primary">
-    //     刷新
-    //   </Button>,
-    // ]}
-    // footer={[
-    //   <Button key="rest">重置</Button>,
-    //   <Button key="submit" type="primary">
-    //     提交
-    //   </Button>,
-    // ]}
-    >
-      {/* <div className={styles.container}>
-        <Guide name={trim(name)} />
-        <input
-          onChange={(e) => setName(e.target.value)}
-          value={name}
-          placeholder="Please enter username"
-          style={{ width: 240, marginRight: 16 }}
-        />
-        <button disabled={loading} type="button" onClick={() => run()}>
-          {(loading ? 'Loading' : 'Edit') + '  (' + blockNumber+')'}
-        </button>
-      </div> */}
+    <PageContainer ghost>
       <RcResizeObserver
         key="resize-observer"
         onResize={(offset) => {
@@ -116,33 +97,35 @@ const MarketPage: React.FC = () => {
       >
         <ProCard
           // title="数据概览"
-          // extra={""}
+          extra={"当前高度: " + blockNumber}
           split={responsive ? 'horizontal' : 'vertical'}
           headerBordered
           bordered
         >
-          <ProCard split="horizontal">
+          <ProCard split="horizontal" colSpan={16}>
             <ProCard split="horizontal">
               <ProCard split="vertical">
                 <StatisticCard
                   statistic={{
-                    title: '总存款',
+                    title: `总存款(${marketsInfo.get(id)?.underlying_symbol})`,
                     value: marketsInfo.get(id)?.total_supply * marketsInfo.get(id)?.exchange_rate,
-                    suffix: marketsInfo.get(id)?.underlying_symbol,
+                    // suffix: marketsInfo.get(id)?.underlying_symbol,
                     precision: 6,
+                    tip: marketsInfo.get(id)?.total_supply * marketsInfo.get(id)?.exchange_rate,
                     description: (
-                      <Statistic title="月同比" value="8.04%" trend="up" />
+                      <Statistic title="利率" value={Math.floor(marketsInfo.get(id)?.supply_rate * 10000) / 100 } trend='up' suffix="%" />
                     ),
                   }}
                 />
                 <StatisticCard
                   statistic={{
-                    title: '总借款',
+                    title: `总借款(${marketsInfo.get(id)?.underlying_symbol})`,
                     value: marketsInfo.get(id)?.total_borrows,
-                    suffix: marketsInfo.get(id)?.underlying_symbol,
+                    // suffix: marketsInfo.get(id)?.underlying_symbol,
                     precision: 6,
+                    tip: marketsInfo.get(id)?.total_borrows,
                     description: (
-                      <Statistic title="月同比" value="8.04%" trend="up" />
+                      <Statistic title="利率" value={Math.floor(marketsInfo.get(id)?.borrow_rate * 10000) / 100} trend='down' suffix="%" />
                     ),
                   }}
                 />
@@ -150,43 +133,108 @@ const MarketPage: React.FC = () => {
               <ProCard split="vertical">
                 <StatisticCard
                   statistic={{
-                    title: '运行中实验',
-                    value: '12/56',
-                    suffix: '个',
+                    title: `现金(${marketsInfo.get(id)?.underlying_symbol})`,
+                    value: marketsInfo.get(id)?.cash,
+                    precision: 6,
+                    // suffix: marketsInfo.get(id)?.underlying_symbol,
+                    // tip: marketsInfo.get(id)?.cash
+                    tip: cash
                   }}
                 />
                 <StatisticCard
                   statistic={{
-                    title: '历史实验总数',
-                    value: '134',
-                    suffix: '个',
+                    title: `运营收益(${marketsInfo.get(id)?.underlying_symbol})`,
+                    value: marketsInfo.get(id)?.reserves,
+                    precision: 6,
+                    // suffix: marketsInfo.get(id)?.underlying_symbol,
+                    tip: profit
                   }}
                 />
               </ProCard>
+              <StatisticCard.Group direction={responsive ? 'column' : 'row'}>
+                <ProCard
+                  // title='参数'
+                  headerBordered
+                  layout='horizontal'
+                >
+                  <StatisticCard
+                    statistic={{
+                      title: 'Collateral Factor',
+                      value: marketsInfo.get(id)?.collateral_factor,
+                      suffix: '%',
+                    }}
+                  />
+                  <Divider type={responsive ? 'horizontal' : 'vertical'} />
+                  <StatisticCard
+                    statistic={{
+                      title: 'Close Factor',
+                      value: marketsInfo.get(id)?.close_factor,
+                      suffix: '%',
+                    }}
+                  />
+                  <Divider type={responsive ? 'horizontal' : 'vertical'} />
+                  <StatisticCard
+                    statistic={{
+                      title: 'Liquidation Factor',
+                      value: marketsInfo.get(id)?.liquidation_incentive,
+                      suffix: '%',
+                    }}
+                  />
+                  <Divider type={responsive ? 'horizontal' : 'vertical'} />
+                  <StatisticCard
+                    statistic={{
+                      title: 'Reserve Factor',
+                      value: marketsInfo.get(id)?.reserve_factor,
+                      suffix: '%',
+                    }}
+                  />
+
+                </ProCard>
+              </StatisticCard.Group>
+              <StatisticCard.Group direction={responsive ? 'column' : 'row'}>
+                <ProCard
+                  // title='参数'
+                  headerBordered
+                  layout='horizontal'
+                >
+                  <StatisticCard
+                    statistic={{
+                      title: 'Reserve Factor',
+                      value: marketsInfo.get(id)?.reserve_factor,
+                      suffix: '%',
+                    }}
+                  />
+                  <Divider type={responsive ? 'horizontal' : 'vertical'} />
+                  <StatisticCard
+                    statistic={{
+                      title: 'Borrow Cap',
+                      value: marketsInfo.get(id)?.borrowCap,
+                    }}
+                  />
+                  <Divider type={responsive ? 'horizontal' : 'vertical'} />
+                  <StatisticCard
+                    statistic={{
+                      title: '挖矿收益点',
+                      value: marketsInfo.get(id)?.comp_speed,
+                    }}
+                  />
+
+                </ProCard>
+              </StatisticCard.Group>
             </ProCard>
-            <StatisticCard
-              title="流量走势"
-              chart={
-                <img
-                  src="https://gw.alipayobjects.com/zos/alicdn/_dZIob2NB/zhuzhuangtu.svg"
-                  width="100%"
-                />
-              }
-            />
           </ProCard>
           <StatisticCard
-            title="流量占用情况"
+            title="流量走势"
             chart={
               <img
-                src="https://gw.alipayobjects.com/zos/alicdn/qoYmFMxWY/jieping2021-03-29%252520xiawu4.32.34.png"
-                alt="大盘"
+                src="https://gw.alipayobjects.com/zos/alicdn/_dZIob2NB/zhuzhuangtu.svg"
                 width="100%"
               />
             }
           />
         </ProCard>
       </RcResizeObserver>
-    </PageContainer>
+    </PageContainer >
   );
 };
 

@@ -101,14 +101,14 @@ export async function getMarkets(
 ) {
   const id = params?.marketId;
   if (id) {
-    console.log('======================> 1');
+    // console.log('======================> 1');
     return request<API.Result_string_>(`/api/market/addresses=[${id}]`, {
       method: 'GET',
       params: { ...params },
       ...(options || {}),
     });
   } else {
-    console.log('======================> 2');
+    // console.log('======================> 2');
     return request<API.Result_string_>(`/api/market`, {
       method: 'GET',
       params: { ...params },
@@ -126,7 +126,7 @@ export async function getAccount(
     // console.log('======================> 3',JSON.stringify(id));
     return request<API.Result_string_>(`/api/account`, {
       method: 'GET',
-      params: { addresses: JSON.stringify(id)},
+      params: { addresses: JSON.stringify(id) },
       ...(options || {}),
     });
   } else {
@@ -137,4 +137,26 @@ export async function getAccount(
       ...(options || {}),
     });
   }
+}
+
+export async function getAllAccountsList(
+  options?: { [key: string]: any },
+) {
+  return request<API.Result_string_>(`/api/statistic/allAccounts`, {
+      method: 'GET',
+      ...(options || {}),
+    });
+}
+
+export async function getBlockNumber(
+  options?: { [key: string]: any },
+) {
+  return request<API.Result_string_>(`/rpc`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: '{"method":"eth_blockNumber","params":[],"id":1,"jsonrpc":"2.0"}',
+    ...(options || {}),
+  });
 }

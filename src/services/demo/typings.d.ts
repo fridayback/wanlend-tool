@@ -141,3 +141,8 @@ interface AccountInfo {
   rewardAddress: string;
   rewardBalance: string;
 }
+
+interface MenuItemInfo {
+  key: string;
+  name: string;
+}

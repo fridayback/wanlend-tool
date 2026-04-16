@@ -15,6 +15,7 @@
     "@ant-design/pro-components": "^2.6.34",
     "@umijs/max": "^4.0.87",
     "antd": "^5.10.3",
+    "bignumber.js": "^9.1.2",
     "rc-resize-observer": "^1.4.0"
   },
   "devDependencies": {
