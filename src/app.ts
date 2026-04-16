@@ -151,8 +151,15 @@ const menuData: MenuDataItem[] = [
   {
     children: [],
     name: "User Account",
-    path: "/Table",
+    path: "/UserAccount",
     icon: React.createElement(UserOutlined),
+    unaccessible: false
+  },
+  {
+    children: [],
+    name: "Stress Test",
+    path: "/StressTest",
+    icon: React.createElement(SlidersOutlined),
     unaccessible: false
   },
   {
@@ -202,8 +209,12 @@ export const layout: RunTimeLayoutConfig = (initialState) => {
       params: menuList,//initialState.initialState.params,
       request: async (params, defaultMenuData) => {
         console.log('&&&&&&&&----1:',menuData,menuList)
+        // 确保menuData[0].children存在
+        if (!menuData[0].children) {
+          menuData[0].children = [];
+        }
         menuList.forEach(item => {
-          menuData[0].children.push({
+          menuData[0].children!.push({
             children: [],
             name: item.name,
             // key: item.key,
@@ -217,7 +228,7 @@ export const layout: RunTimeLayoutConfig = (initialState) => {
         return menuData;
       }
     },
-      title: initialState.initialState.name,
+      title: initialState?.initialState?.name || 'Wanlend RR View',
       logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
       // // 默认布局调整
       // rightContentRender: undefined,//() => <RightContent />,
@@ -225,7 +236,7 @@ export const layout: RunTimeLayoutConfig = (initialState) => {
       // menuHeaderRender: undefined,
       disableContentMargin: false,
       waterMarkProps: {
-        content: initialState.initialState.name// +JSON.stringify(initialState),
+        content: initialState?.initialState?.name || 'Wanlend RR View'// +JSON.stringify(initialState),
       },
       onPageChange: (location) => {
         console.log('onPageChange', location);

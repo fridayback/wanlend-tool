@@ -107,42 +107,42 @@ declare namespace API {
     borrowCap: string;
     reserve_factor: string;
   };
-}
 
-interface AccountTokenInfo {
-  account_address: string;
-  token_address: string;
-  is_entered: boolean;
-  account_total_borrow: string;
-  account_total_repay: string;
-  account_total_supply: string;
-  account_total_redeem: string;
-  account_total_liquidated: string;
-  account_total_liquidate: string;
-  lifetime_borrow_interest_accrued: string;
-  lifetime_supply_interest_accrued: string;
-  supply_balance: string;
-  borrow_balance_underlying: string;
-  supply_balance_underlying: string;
-  timestamp: string;
-  comp_index_borrow: string;
-  comp_index_supply: string
-}
+  interface AccountTokenInfo {
+    account_address: string;
+    token_address: string;
+    is_entered: boolean;
+    account_total_borrow: string;
+    account_total_repay: string;
+    account_total_supply: string;
+    account_total_redeem: string;
+    account_total_liquidated: string;
+    account_total_liquidate: string;
+    lifetime_borrow_interest_accrued: string;
+    lifetime_supply_interest_accrued: string;
+    supply_balance: string;
+    borrow_balance_underlying: string;
+    supply_balance_underlying: string;
+    timestamp: string;
+    comp_index_borrow: string;
+    comp_index_supply: string
+  }
 
-interface AccountInfo {
-  address: string;
-  health: string;
-  net_asset_value: string;
-  tokens: AccountTokenInfo[];
-  total_borrow_value: string;
-  total_collateral_value: string;
-  timestamp: number;
-  comp_reward: string;
-  rewardAddress: string;
-  rewardBalance: string;
-}
+  interface AccountInfo {
+    address: string;
+    health: string;
+    net_asset_value: string;
+    tokens: AccountTokenInfo[];
+    total_borrow_value: string;
+    total_collateral_value: string;
+    timestamp: number;
+    comp_reward: string;
+    rewardAddress: string;
+    rewardBalance: string;
+  }
 
-interface MenuItemInfo {
-  key: string;
-  name: string;
+  interface MenuItemInfo {
+    key: string;
+    name: string;
+  }
 }
