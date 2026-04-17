@@ -12,6 +12,7 @@ import { Button, Divider, Drawer, message, Progress, Space, Card, Row, Col, Stat
 import React, { useRef, useState, useEffect } from 'react';
 import { useModel } from '@umijs/max';
 import { BigNumber } from 'bignumber.js';
+import * as XLSX from 'xlsx';
 
 const { getAllAccountsList, getAccount } = services.UserController;
 
@@ -153,6 +154,101 @@ const exportToCSV = (accounts: API.AccountInfo[], marketsInfo: Map<string, API.M
   document.body.removeChild(link);
 
   message.success(`成功导出 ${accounts.length} 条记录`);
+};
+
+/**
+ * 导出Excel文件
+ */
+const exportToExcel = (accounts: API.AccountInfo[], marketsInfo: Map<string, API.MarketInfo>) => {
+  if (!accounts || accounts.length === 0) {
+    message.warning('没有数据可导出');
+    return;
+  }
+
+  // 从marketsInfo中获取所有代币，按市场列表顺序排列
+  const marketList = Array.from(marketsInfo.values());
+  
+  if (marketList.length === 0) {
+    message.warning('没有市场数据可导出');
+    return;
+  }
+
+  // 分析代币信息，获取代币符号
+  const tokenInfoList = marketList.map(market => ({
+    tokenAddress: market.token_address,
+    symbol: market.underlying_symbol || market.token_address.slice(0, 8) + '...',
+    price: new BigNumber(market.underlying_price || 0),
+    collateralFactor: new BigNumber(market.collateral_factor || 0),
+  }));
+
+  // 构建表头
+  const baseHeaders = ['地址', '健康值'];
+  
+  // 为每个代币添加4个列（移除价格和抵押因子列）
+  const tokenHeaders = tokenInfoList.flatMap(token => [
+    `${token.symbol}_借款数量`,
+    `${token.symbol}_借款价值`,
+    `${token.symbol}_供应数量`,
+    `${token.symbol}_抵押价值`,
+  ]);
+
+  const headers = [...baseHeaders, ...tokenHeaders];
+
+  // 构建数据行
+  const dataRows = accounts.map(account => {
+    const baseData = [
+      account.address,
+      new BigNumber(account.health || 0).toFixed(6),
+    ];
+
+    // 为每个代币添加数据（只保留4个值）
+    const tokenData = tokenInfoList.flatMap(tokenInfo => {
+      const token = account.tokens?.find(t => t.token_address === tokenInfo.tokenAddress);
+      
+      if (!token) {
+        // 如果该用户没有这个代币，返回空值
+        return ['0', '0', '0', '0'];
+      }
+
+      const borrowBalance = new BigNumber(token.borrow_balance_underlying || 0);
+      const supplyBalance = new BigNumber(token.supply_balance_underlying || 0);
+      
+      // 计算借款价值：借款数量 × 代币价格
+      const borrowValue = borrowBalance.times(tokenInfo.price);
+      
+      // 计算抵押价值：供应数量 × 代币价格 × 抵押因子
+      const collateralValue = supplyBalance.times(tokenInfo.price).times(tokenInfo.collateralFactor);
+
+      return [
+        borrowBalance.toFixed(4),           // 借款数量
+        borrowValue.toFixed(4),             // 借款价值
+        supplyBalance.toFixed(4),           // 供应数量
+        collateralValue.toFixed(4),         // 抵押价值
+      ];
+    });
+
+    return [...baseData, ...tokenData];
+  });
+
+  // 创建工作簿和工作表
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+  
+  // 设置列宽
+  const colWidths = headers.map(header => ({
+    wch: Math.max(15, header.length + 2), // 最小宽度15，根据标题长度调整
+  }));
+  worksheet['!cols'] = colWidths;
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, '用户账户详情');
+
+  // 生成文件名
+  const fileName = `用户账户详情_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  
+  // 写入文件并触发下载
+  XLSX.writeFile(workbook, fileName);
+
+  message.success(`成功导出 ${accounts.length} 条记录到Excel`);
 };
 
 interface UserListItem {
@@ -355,13 +451,22 @@ const UserAccountPage: React.FC<unknown> = () => {
     setBatchProgress({ current: 0, total: 0 });
   };
 
-  // 导出数据
-  const handleExport = () => {
+  // 导出CSV数据
+  const handleExportCSV = () => {
     if (accountDetails.length === 0) {
       message.warning('没有可导出的数据，请先获取用户详情');
       return;
     }
     exportToCSV(accountDetails, marketsInfo);
+  };
+
+  // 导出Excel数据
+  const handleExportExcel = () => {
+    if (accountDetails.length === 0) {
+      message.warning('没有可导出的数据，请先获取用户详情');
+      return;
+    }
+    exportToExcel(accountDetails, marketsInfo);
   };
 
   // 计算统计数据
@@ -459,10 +564,17 @@ const UserAccountPage: React.FC<unknown> = () => {
             全部详情
           </Button>
           <Button
-            onClick={handleExport}
+            onClick={handleExportCSV}
             disabled={accountDetails.length === 0}
           >
             导出CSV
+          </Button>
+          <Button
+            onClick={handleExportExcel}
+            disabled={accountDetails.length === 0}
+            type="primary"
+          >
+            导出Excel
           </Button>
         </Space>
       </div>
