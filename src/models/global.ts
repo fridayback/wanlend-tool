@@ -17,7 +17,7 @@ const global = () => {
 
   useEffect(() => {
     UserController.UserController.getMarkets({}).then((res) => {
-      // console.log(res);
+      console.log(res);
       let data = new Map<string, API.MarketInfo>();
       let menuItemInfo = [];
       res.markets.forEach((item: API.MarketInfo) => {

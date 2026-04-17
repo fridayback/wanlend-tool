@@ -22,19 +22,18 @@ const handleGetAllAccounts = async () => {
   const hide = message.loading('正在获取用户列表...');
   try {
     const result = await getAllAccountsList();
+    // console.log('获取用户列表result2 =', result);
     hide();
-    if (result.success) {
-      // API返回的是JSON字符串，需要解析
-      const data = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
-      message.success(`成功获取 ${data.accounts?.length || 0} 个用户`);
-      return data;
+    if (result) {
+      message.success(`成功获取 ${result?.length || 0} 个用户`);
+      return result;
     } else {
-      message.error('获取用户列表失败: ' + result.errorMessage);
+      message.error('获取用户列表失败: ' + (result?.errorMessage || '未知错误'));
       return null;
     }
   } catch (error) {
     hide();
-    message.error('获取用户列表失败: ' + error.message);
+    message.error('获取用户列表失败: ' + (error as Error).message);
     return null;
   }
 };
@@ -44,20 +43,26 @@ const handleGetAllAccounts = async () => {
  */
 const handleGetAccountDetails = async (addresses: string[]) => {
   const hide = message.loading(`正在获取 ${addresses.length} 个用户详情...`);
+  // console.log('请求用户详情的地址列表 =', addresses);
   try {
     const result = await getAccount({ addresses });
+    console.log('获取用户详情result =', result);
     hide();
-    if (result.success) {
-      const data = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
-      message.success(`成功获取用户详情`);
-      return data;
+    if (result && result.accounts) {
+      if (result.accounts.length > 0) {
+        message.success(`成功获取 ${result.accounts.length} 个用户详情`);
+        return result.accounts;
+      } else {
+        message.error('获取用户详情失败: ' + (result?.errorMessage || '未知错误'));
+        return null;
+      }
     } else {
-      message.error('获取用户详情失败: ' + result.errorMessage);
+      message.error('获取用户详情失败: ' + (result?.errorMessage || '未知错误'));
       return null;
     }
   } catch (error) {
     hide();
-    message.error('获取用户详情失败: ' + error.message);
+    message.error('获取用户详情失败: ' + (error as Error).message);
     return null;
   }
 };
@@ -76,19 +81,19 @@ const handleGetAllAccountDetails = async (
   for (let i = 0; i < total; i += batchSize) {
     const batchAddresses = allAddresses.slice(i, i + batchSize);
     const result = await handleGetAccountDetails(batchAddresses);
-    
-    if (result && result.accounts) {
-      allAccounts = [...allAccounts, ...result.accounts];
+
+    if (result) {
+      allAccounts = [...allAccounts, ...result];
     }
-    
+
     onProgress(Math.min(i + batchSize, total), total);
-    
+
     // 避免请求过快，添加延迟
     if (i + batchSize < total) {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
-  
+
   return allAccounts;
 };
 
@@ -120,7 +125,7 @@ const exportToCSV = (accounts: API.AccountInfo[], marketsInfo: Map<string, API.M
     const netAssetValue = new BigNumber(account.net_asset_value || 0).toFixed(4);
     const totalBorrowValue = new BigNumber(account.total_borrow_value || 0).toFixed(4);
     const totalCollateralValue = new BigNumber(account.total_collateral_value || 0).toFixed(4);
-    
+
     return [
       account.address,
       healthValue,
@@ -135,7 +140,7 @@ const exportToCSV = (accounts: API.AccountInfo[], marketsInfo: Map<string, API.M
   });
 
   const csvContent = [headers.join(','), ...rows].join('\n');
-  
+
   // 创建下载链接
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
@@ -146,14 +151,23 @@ const exportToCSV = (accounts: API.AccountInfo[], marketsInfo: Map<string, API.M
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  
+
   message.success(`成功导出 ${accounts.length} 条记录`);
 };
 
+interface UserListItem {
+  address: string;
+  health?: string;
+  hasDetails: boolean;
+  net_asset_value?: string;
+  total_borrow_value?: string;
+  total_collateral_value?: string;
+}
+
 const UserAccountPage: React.FC<unknown> = () => {
   const { marketsInfo } = useModel('global');
-  const [userList, setUserList] = useState<{address: string, health?: string}[]>([]);
-  const [selectedRows, setSelectedRows] = useState<{address: string, health?: string}[]>([]);
+  const [userList, setUserList] = useState<UserListItem[]>([]);
+  const [selectedRows, setSelectedRows] = useState<UserListItem[]>([]);
   const [accountDetails, setAccountDetails] = useState<API.AccountInfo[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<API.AccountInfo>();
   const [loading, setLoading] = useState(false);
@@ -162,7 +176,7 @@ const UserAccountPage: React.FC<unknown> = () => {
   const actionRef = useRef<ActionType>();
 
   // 表格列定义
-  const columns: ProColumns<{address: string, health?: string}>[] = [
+  const columns: ProColumns<UserListItem>[] = [
     {
       title: '地址',
       dataIndex: 'address',
@@ -183,13 +197,24 @@ const UserAccountPage: React.FC<unknown> = () => {
         let status: 'success' | 'warning' | 'error' = 'success';
         if (healthNum >= 1) status = 'error';
         else if (healthNum >= 0.8) status = 'warning';
-        
+
         return (
           <span style={{ color: status === 'success' ? '#52c41a' : status === 'warning' ? '#faad14' : '#ff4d4f' }}>
-            {new BigNumber(health || 0).toFixed(4)}
+            {health === undefined ? '-' : new BigNumber(health || 0).toFixed(4)}
           </span>
         );
       },
+    },
+    {
+      title: '详情状态',
+      dataIndex: 'hasDetails',
+      key: 'hasDetails',
+      width: 100,
+      render: (hasDetails) => (
+        <span style={{ color: hasDetails ? '#52c41a' : '#faad14' }}>
+          {hasDetails ? '已获取' : '未获取'}
+        </span>
+      ),
     },
     {
       title: '操作',
@@ -198,13 +223,15 @@ const UserAccountPage: React.FC<unknown> = () => {
       width: 100,
       render: (_, record) => (
         <a
-          onClick={async () => {
-            setLoading(true);
-            const result = await handleGetAccountDetails([record.address]);
-            if (result && result.accounts && result.accounts.length > 0) {
-              setSelectedAccount(result.accounts[0]);
+          onClick={() => {
+            // 从本地已获取的accountDetails中查找该用户的AccountInfo
+            const accountInfo = accountDetails.find(acc => acc.address === record.address);
+            if (accountInfo) {
+              setSelectedAccount(accountInfo);
+            } else {
+              // 如果本地没有该用户的详情数据，提示用户先获取详情
+              message.warning(`请先获取用户 ${record.address} 的详情数据`);
             }
-            setLoading(false);
           }}
         >
           查看详情
@@ -213,18 +240,36 @@ const UserAccountPage: React.FC<unknown> = () => {
     },
   ];
 
-  // 获取用户列表
+  // 获取用户列表 - 只获取地址列表，不保存不完整的账户信息
   const handleGetUserList = async () => {
     setLoading(true);
     const result = await handleGetAllAccounts();
-    if (result && result.accounts) {
-      const users = result.accounts.map((account: API.AccountInfo) => ({
-        address: account.address,
-        health: account.health
+    console.log('用户列表result =', result);
+    if (result) {
+      // 只提取地址和健康度信息用于显示
+      const users = result.map((account: string) => ({
+        address: account,
+        health: undefined,
+        hasDetails: false // 标记为未获取详情
       }));
       setUserList(users);
-      // 同时保存完整的账户信息供后续使用
-      setAccountDetails(result.accounts);
+      // console.log('用户列表 =', users);
+      // 清空accountDetails，因为获取用户列表时得到的是不完整数据
+      const allDetails = users.map((user: UserListItem) => ({
+        address: user.address,
+        health: '-',
+        net_asset_value: '0',
+        total_borrow_value: '0',
+        total_collateral_value: '0',
+        comp_reward: '0',
+        rewardAddress: '',
+        rewardBalance: '0',
+        timestamp: 0,
+        tokens: [],
+        hasDetails: false,
+      }));
+      setAccountDetails(allDetails);
+      message.success(`成功获取 ${users.length} 个用户地址`);
     }
     setLoading(false);
   };
@@ -235,23 +280,50 @@ const UserAccountPage: React.FC<unknown> = () => {
       message.warning('请先选择用户');
       return;
     }
-    
+
     setLoading(true);
     const addresses = selectedRows.map(row => row.address);
     const result = await handleGetAccountDetails(addresses);
-    if (result && result.accounts) {
+    console.log('选中用户详情result =', result);
+    if (result) {
       // 更新账户详情
       const updatedDetails = [...accountDetails];
-      result.accounts.forEach((newAccount: API.AccountInfo) => {
+      const updatedUserList = [...userList];
+
+      result.forEach((newAccount: API.AccountInfo) => {
         const index = updatedDetails.findIndex(acc => acc.address === newAccount.address);
         if (index >= 0) {
           updatedDetails[index] = newAccount;
         } else {
           updatedDetails.push(newAccount);
         }
+
+        // 更新userList中的hasDetails标志
+        const userIndex = updatedUserList.findIndex(user => user.address === newAccount.address);
+        if (userIndex >= 0) {
+          updatedUserList[userIndex] = {
+            ...updatedUserList[userIndex],
+            hasDetails: true,
+            health: newAccount.health,
+            net_asset_value: newAccount.net_asset_value,
+            total_borrow_value: newAccount.total_borrow_value,
+            total_collateral_value: newAccount.total_collateral_value,
+          };
+        }
       });
+
       setAccountDetails(updatedDetails);
-      message.success(`成功获取 ${result.accounts.length} 个用户详情`);
+      console.log('更新后的账户详情 =', updatedDetails);
+      setUserList(updatedUserList);
+
+      // 保存到localStorage供压力测试页面使用
+      try {
+        localStorage.setItem('userAccountDetails', JSON.stringify(updatedDetails));
+      } catch (error) {
+        console.error('Failed to save account details to localStorage:', error);
+      }
+
+      message.success(`成功获取 ${result.length} 个用户详情`);
     }
     setLoading(false);
   };
@@ -262,10 +334,10 @@ const UserAccountPage: React.FC<unknown> = () => {
       message.warning('请先获取用户列表');
       return;
     }
-    
+
     setBatchLoading(true);
     setBatchProgress({ current: 0, total: userList.length });
-    
+
     const addresses = userList.map(user => user.address);
     const allAccounts = await handleGetAllAccountDetails(
       addresses,
@@ -273,12 +345,12 @@ const UserAccountPage: React.FC<unknown> = () => {
         setBatchProgress({ current, total });
       }
     );
-    
+
     if (allAccounts.length > 0) {
       setAccountDetails(allAccounts);
       message.success(`成功获取所有 ${allAccounts.length} 个用户详情`);
     }
-    
+
     setBatchLoading(false);
     setBatchProgress({ current: 0, total: 0 });
   };
@@ -303,8 +375,18 @@ const UserAccountPage: React.FC<unknown> = () => {
       const health = new BigNumber(user.health || 0).toNumber();
       return health >= 1;
     }).length,
-    totalDetails: accountDetails.length,
+    totalDetails: accountDetails.filter(acc => acc.timestamp > 0).length,
   };
+
+  console.log('统计数据 =', stats);
+  // 确保统计值为数字
+  const safeStats = {
+    totalUsers: Number(stats.totalUsers) || 0,
+    healthyUsers: Number(stats.healthyUsers) || 0,
+    unhealthyUsers: Number(stats.unhealthyUsers) || 0,
+    totalDetails: Number(stats.totalDetails) || 0,
+  };
+  
 
   return (
     <PageContainer
@@ -318,7 +400,7 @@ const UserAccountPage: React.FC<unknown> = () => {
           <Card>
             <Statistic
               title="总用户数"
-              value={stats.totalUsers}
+              value={safeStats.totalUsers}
               valueStyle={{ color: '#1890ff' }}
             />
           </Card>
@@ -327,7 +409,7 @@ const UserAccountPage: React.FC<unknown> = () => {
           <Card>
             <Statistic
               title="健康账户"
-              value={stats.healthyUsers}
+              value={safeStats.healthyUsers}
               valueStyle={{ color: '#52c41a' }}
             />
           </Card>
@@ -336,7 +418,7 @@ const UserAccountPage: React.FC<unknown> = () => {
           <Card>
             <Statistic
               title="风险账户"
-              value={stats.unhealthyUsers}
+              value={safeStats.unhealthyUsers}
               valueStyle={{ color: '#ff4d4f' }}
             />
           </Card>
@@ -345,7 +427,7 @@ const UserAccountPage: React.FC<unknown> = () => {
           <Card>
             <Statistic
               title="已获取详情"
-              value={stats.totalDetails}
+              value={safeStats.totalDetails}
               valueStyle={{ color: '#722ed1' }}
             />
           </Card>
@@ -397,7 +479,7 @@ const UserAccountPage: React.FC<unknown> = () => {
       )}
 
       {/* 用户列表表格 */}
-      <ProTable<{address: string, health?: string}>
+      <ProTable<UserListItem>
         headerTitle="用户列表"
         actionRef={actionRef}
         rowKey="address"
@@ -451,24 +533,25 @@ const UserAccountPage: React.FC<unknown> = () => {
                   dataIndex: 'address',
                   span: 2,
                   render: (text) => (
-                    <span style={{ fontFamily: 'monospace' }}>{text}</span>
+                    <span style={{ fontFamily: 'monospace' }}>{text as string}</span>
                   ),
                 },
                 {
                   title: '健康度',
                   dataIndex: 'health',
                   render: (health) => {
-                    const healthNum = new BigNumber(health || 0).toNumber();
+                    const healthStr = (health as string) || '0';
+                    const healthNum = new BigNumber(healthStr).toNumber();
                     let status = 'success';
                     if (healthNum >= 1) status = 'error';
                     else if (healthNum >= 0.8) status = 'warning';
-                    
+
                     return (
-                      <span style={{ 
+                      <span style={{
                         color: status === 'success' ? '#52c41a' : status === 'warning' ? '#faad14' : '#ff4d4f',
                         fontWeight: 'bold'
                       }}>
-                        {new BigNumber(health || 0).toFixed(6)}
+                        {new BigNumber(healthStr).toFixed(6)}
                       </span>
                     );
                   },
@@ -476,59 +559,126 @@ const UserAccountPage: React.FC<unknown> = () => {
                 {
                   title: '净资产值',
                   dataIndex: 'net_asset_value',
-                  render: (value) => <span>{new BigNumber(value || 0).toFixed(4)}</span>,
+                  render: (value) => {
+                    const valueStr = (value as string) || '0';
+                    return <span>{new BigNumber(valueStr).toFixed(4)}</span>;
+                  },
                 },
                 {
                   title: '借款总值',
                   dataIndex: 'total_borrow_value',
-                  render: (value) => <span>{new BigNumber(value || 0).toFixed(4)}</span>,
+                  render: (value) => {
+                    const valueStr = (value as string) || '0';
+                    return <span>{new BigNumber(valueStr).toFixed(4)}</span>;
+                  },
                 },
                 {
                   title: '抵押总值',
                   dataIndex: 'total_collateral_value',
-                  render: (value) => <span>{new BigNumber(value || 0).toFixed(4)}</span>,
+                  render: (value) => {
+                    const valueStr = (value as string) || '0';
+                    return <span>{new BigNumber(valueStr).toFixed(4)}</span>;
+                  },
                 },
                 {
                   title: '挖矿奖励',
                   dataIndex: 'comp_reward',
-                  render: (value) => <span>{new BigNumber(value || 0).toFixed(4)}</span>,
+                  render: (value) => {
+                    const valueStr = (value as string) || '0';
+                    return <span>{new BigNumber(valueStr).toFixed(4)}</span>;
+                  },
                 },
               ]}
             />
-            
+
             <Divider />
-            
+
             <h3>代币持仓</h3>
             <ProTable<API.AccountTokenInfo>
               dataSource={selectedAccount.tokens || []}
               rowKey="token_address"
               columns={[
                 {
-                  title: '代币地址',
+                  title: '代币符号',
                   dataIndex: 'token_address',
-                  width: 300,
-                  render: (text) => (
-                    <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{text}</span>
-                  ),
+                  width: 120,
+                  render: (text) => {
+                    const tokenAddress = (text as string) || '';
+                    const marketInfo = marketsInfo.get(tokenAddress);
+                    return marketInfo ? (
+                      <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                        {marketInfo.underlying_symbol || '未知'}
+                      </span>
+                    ) : (
+                      <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#999' }}>
+                        {tokenAddress ? `${tokenAddress.slice(0, 8)}...` : '无地址'}
+                      </span>
+                    );
+                  },
+                },
+                {
+                  title: '代币名称',
+                  dataIndex: 'token_address',
+                  width: 150,
+                  render: (text) => {
+                    const tokenAddress = (text as string) || '';
+                    const marketInfo = marketsInfo.get(tokenAddress);
+                    return (
+                      <span style={{ color: marketInfo ? 'inherit' : '#999' }}>
+                        {marketInfo?.underlying_name || '未知代币'}
+                      </span>
+                    );
+                  },
+                },
+                {
+                  title: '当前价格',
+                  dataIndex: 'token_address',
+                  width: 100,
+                  render: (text) => {
+                    const tokenAddress = (text as string) || '';
+                    const marketInfo = marketsInfo.get(tokenAddress);
+                    return (
+                      <span style={{ color: marketInfo ? 'inherit' : '#999' }}>
+                        {marketInfo ? new BigNumber(marketInfo.underlying_price || 0).toFixed(4) : '-'}
+                      </span>
+                    );
+                  },
                 },
                 {
                   title: '是否进入市场',
                   dataIndex: 'is_entered',
+                  width: 100,
                   render: (entered) => (
-                    <span style={{ color: entered ? '#52c41a' : '#ff4d4f' }}>
-                      {entered ? '是' : '否'}
+                    <span style={{ color: (entered as boolean) ? '#52c41a' : '#ff4d4f' }}>
+                      {(entered as boolean) ? '是' : '否'}
                     </span>
                   ),
                 },
                 {
                   title: '供应余额',
                   dataIndex: 'supply_balance_underlying',
-                  render: (value) => <span>{new BigNumber(value || 0).toFixed(4)}</span>,
+                  width: 120,
+                  render: (value) => <span>{new BigNumber((value as string) || 0).toFixed(4)}</span>,
                 },
                 {
                   title: '借款余额',
                   dataIndex: 'borrow_balance_underlying',
-                  render: (value) => <span>{new BigNumber(value || 0).toFixed(4)}</span>,
+                  width: 120,
+                  render: (value) => <span>{new BigNumber((value as string) || 0).toFixed(4)}</span>,
+                },
+                {
+                  title: '抵押因子',
+                  dataIndex: 'token_address',
+                  width: 100,
+                  render: (text) => {
+                    const tokenAddress = (text as string) || '';
+                    const marketInfo = marketsInfo.get(tokenAddress);
+                    return (
+                      <span style={{ color: marketInfo ? 'inherit' : '#999' }}>
+                        {marketInfo ? new BigNumber(marketInfo.collateral_factor || 0).toFixed(4) : '-'}
+                      </span>
+                    );
+                  },
                 },
               ]}
               pagination={false}

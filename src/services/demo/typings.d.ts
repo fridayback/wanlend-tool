@@ -139,10 +139,16 @@ declare namespace API {
     comp_reward: string;
     rewardAddress: string;
     rewardBalance: string;
+    hasDetails: boolean;
   }
 
   interface MenuItemInfo {
     key: string;
     name: string;
   }
+
+  interface AccountList{
+  accounts: string[];
 }
+}
+
