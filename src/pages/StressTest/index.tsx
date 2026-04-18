@@ -33,17 +33,42 @@ const StressTestPage: React.FC<unknown> = () => {
   const [testResult, setTestResult] = useState<StressTestResult | null>(null);
   const [accountDetails, setAccountDetails] = useState<API.AccountInfo[]>([]);
 
-  // 从User Account页面获取账户详情数据
+  // 从localStorage恢复所有数据
   useEffect(() => {
-    // 这里可以从localStorage或全局状态获取User Account页面获取的数据
-    // 在实际应用中，可以通过全局状态管理共享数据
+    // 恢复账户详情数据
     const storedAccounts = localStorage.getItem('userAccountDetails');
     if (storedAccounts) {
       try {
         const accounts = JSON.parse(storedAccounts);
-        setAccountDetails(accounts);
+        if (Array.isArray(accounts)) {
+          setAccountDetails(accounts);
+        }
       } catch (error) {
         console.error('Failed to parse stored account details:', error);
+      }
+    }
+
+    // 恢复调整后的抵押因子
+    const storedAdjustedFactors = localStorage.getItem('stressTestAdjustedFactors');
+    if (storedAdjustedFactors) {
+      try {
+        const factors = JSON.parse(storedAdjustedFactors);
+        if (factors && typeof factors === 'object') {
+          setAdjustedFactors(factors);
+        }
+      } catch (error) {
+        console.error('Failed to parse stored adjusted factors:', error);
+      }
+    }
+
+    // 恢复压力测试结果
+    const storedTestResult = localStorage.getItem('stressTestResult');
+    if (storedTestResult) {
+      try {
+        const result = JSON.parse(storedTestResult);
+        setTestResult(result);
+      } catch (error) {
+        console.error('Failed to parse stored test result:', error);
       }
     }
   }, []);
@@ -69,10 +94,18 @@ const StressTestPage: React.FC<unknown> = () => {
   // 处理抵押因子调整
   const handleFactorChange = (tokenAddress: string, value: number | null) => {
     if (value !== null) {
-      setAdjustedFactors(prev => ({
-        ...prev,
+      const newFactors = {
+        ...adjustedFactors,
         [tokenAddress]: value
-      }));
+      };
+      setAdjustedFactors(newFactors);
+      
+      // 保存到localStorage
+      try {
+        localStorage.setItem('stressTestAdjustedFactors', JSON.stringify(newFactors));
+      } catch (error) {
+        console.error('Failed to save adjusted factors to localStorage:', error);
+      }
     }
   };
 
@@ -111,6 +144,14 @@ const StressTestPage: React.FC<unknown> = () => {
 
       setTestResult(result);
       setLoading(false);
+      
+      // 保存测试结果到localStorage
+      try {
+        localStorage.setItem('stressTestResult', JSON.stringify(result));
+      } catch (error) {
+        console.error('Failed to save test result to localStorage:', error);
+      }
+      
       message.success(`压力测试完成: ${healthyCount}个健康账户, ${unhealthyCount}个风险账户`);
     }, 1000);
   };

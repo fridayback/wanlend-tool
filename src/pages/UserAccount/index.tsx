@@ -75,7 +75,7 @@ const handleGetAllAccountDetails = async (
   allAddresses: string[],
   onProgress: (current: number, total: number) => void
 ) => {
-  const batchSize = 10; // 每批次请求10个地址
+  const batchSize = 20; // 每批次请求20个地址
   const total = allAddresses.length;
   let allAccounts: API.AccountInfo[] = [];
 
@@ -271,6 +271,48 @@ const UserAccountPage: React.FC<unknown> = () => {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const actionRef = useRef<ActionType>();
 
+  // 从localStorage恢复数据
+  useEffect(() => {
+    // 恢复userList
+    const storedUserList = localStorage.getItem('userAccountUserList');
+    if (storedUserList) {
+      try {
+        const parsedList = JSON.parse(storedUserList);
+        if (Array.isArray(parsedList)) {
+          setUserList(parsedList);
+        }
+      } catch (error) {
+        console.error('Failed to parse stored user list:', error);
+      }
+    }
+
+    // 恢复accountDetails
+    const storedAccountDetails = localStorage.getItem('userAccountDetails');
+    if (storedAccountDetails) {
+      try {
+        const parsedDetails = JSON.parse(storedAccountDetails);
+        if (Array.isArray(parsedDetails)) {
+          setAccountDetails(parsedDetails);
+        }
+      } catch (error) {
+        console.error('Failed to parse stored account details:', error);
+      }
+    }
+
+    // 恢复selectedRows（可选，通常不需要恢复选中状态）
+    const storedSelectedRows = localStorage.getItem('userAccountSelectedRows');
+    if (storedSelectedRows) {
+      try {
+        const parsedRows = JSON.parse(storedSelectedRows);
+        if (Array.isArray(parsedRows)) {
+          setSelectedRows(parsedRows);
+        }
+      } catch (error) {
+        console.error('Failed to parse stored selected rows:', error);
+      }
+    }
+  }, []);
+
   // 表格列定义
   const columns: ProColumns<UserListItem>[] = [
     {
@@ -306,9 +348,9 @@ const UserAccountPage: React.FC<unknown> = () => {
       dataIndex: 'hasDetails',
       key: 'hasDetails',
       width: 100,
-      render: (hasDetails) => (
-        <span style={{ color: hasDetails ? '#52c41a' : '#faad14' }}>
-          {hasDetails ? '已获取' : '未获取'}
+      render: (text, record) => (
+        <span style={{ color: record.hasDetails ? '#52c41a' : '#faad14' }}>
+          {record.hasDetails ? '已获取' : '未获取'}
         </span>
       ),
     },
@@ -343,13 +385,20 @@ const UserAccountPage: React.FC<unknown> = () => {
     console.log('用户列表result =', result);
     if (result) {
       // 只提取地址和健康度信息用于显示
-      const users = result.map((account: string) => ({
+      const users = Array.isArray(result) ? result.map((account: string) => ({
         address: account,
         health: undefined,
         hasDetails: false // 标记为未获取详情
-      }));
+      })) : [];
       setUserList(users);
-      // console.log('用户列表 =', users);
+      
+      // 保存到localStorage
+      try {
+        localStorage.setItem('userAccountUserList', JSON.stringify(users));
+      } catch (error) {
+        console.error('Failed to save user list to localStorage:', error);
+      }
+      
       // 清空accountDetails，因为获取用户列表时得到的是不完整数据
       const allDetails = users.map((user: UserListItem) => ({
         address: user.address,
@@ -365,6 +414,10 @@ const UserAccountPage: React.FC<unknown> = () => {
         hasDetails: false,
       }));
       setAccountDetails(allDetails);
+      
+      // 清空选中状态
+      setSelectedRows([]);
+      
       message.success(`成功获取 ${users.length} 个用户地址`);
     }
     setLoading(false);
@@ -411,6 +464,13 @@ const UserAccountPage: React.FC<unknown> = () => {
       setAccountDetails(updatedDetails);
       console.log('更新后的账户详情 =', updatedDetails);
       setUserList(updatedUserList);
+      
+      // 保存userList到localStorage
+      try {
+        localStorage.setItem('userAccountUserList', JSON.stringify(updatedUserList));
+      } catch (error) {
+        console.error('Failed to save user list to localStorage:', error);
+      }
 
       // 保存到localStorage供压力测试页面使用
       try {
@@ -419,7 +479,10 @@ const UserAccountPage: React.FC<unknown> = () => {
         console.error('Failed to save account details to localStorage:', error);
       }
 
-      message.success(`成功获取 ${result.length} 个用户详情`);
+      // 获取详情后清空选中状态
+      setSelectedRows([]);
+      
+      message.success(`成功获取 ${result.length} 个用户详情，已清空选中状态`);
     }
     setLoading(false);
   };
