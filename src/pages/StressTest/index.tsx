@@ -98,10 +98,16 @@ const StressTestPage: React.FC<unknown> = () => {
 
   // 执行压力测试
   const runStressTest = () => {
-    if (accountDetails.length === 0) {
-      message.warning('请先在User Account页面获取用户详情数据');
+    const validAccounts = getValidAccounts();
+    
+    if (validAccounts.length === 0) {
+      message.warning('没有有效的用户账户数据（请确保用户有supply额度）');
       return;
     }
+
+    const totalAccounts = accountDetails.length;
+    const validCount = validAccounts.length;
+    const excludedCount = totalAccounts - validCount;
 
     setLoading(true);
     
@@ -110,8 +116,8 @@ const StressTestPage: React.FC<unknown> = () => {
       let healthyCount = 0;
       let unhealthyCount = 0;
 
-      // 对每个账户重新计算健康度
-      accountDetails.forEach(account => {
+      // 对每个有效账户重新计算健康度
+      validAccounts.forEach(account => {
         const healthValue = calculateHealthWithAdjustedFactors(account);
         if (healthValue >= 1) {
           unhealthyCount++;
@@ -120,7 +126,7 @@ const StressTestPage: React.FC<unknown> = () => {
         }
       });
 
-      const total = accountDetails.length;
+      const total = validAccounts.length;
       const result: StressTestResult = {
         healthyAccounts: healthyCount,
         unhealthyAccounts: unhealthyCount,
@@ -139,14 +145,20 @@ const StressTestPage: React.FC<unknown> = () => {
         console.error('Failed to save test result to localStorage:', error);
       }
       
-      message.success(`压力测试完成: ${healthyCount}个健康账户, ${unhealthyCount}个风险账户`);
+      let successMsg = `压力测试完成: ${healthyCount}个健康账户, ${unhealthyCount}个风险账户`;
+      if (excludedCount > 0) {
+        successMsg += ` (已排除${excludedCount}个supply全为0的账户)`;
+      }
+      message.success(successMsg);
     }, 1000);
   };
 
   // 导出压力测试结果到Excel
   const exportStressTestToExcel = () => {
-    if (accountDetails.length === 0) {
-      message.warning('没有数据可导出，请先获取用户详情数据');
+    const validAccounts = getValidAccounts();
+    
+    if (validAccounts.length === 0) {
+      message.warning('没有有效的用户账户数据可导出（请确保用户有supply额度）');
       return;
     }
 
@@ -155,17 +167,21 @@ const StressTestPage: React.FC<unknown> = () => {
       return;
     }
 
-    // 构建表头
+    // 构建表头 - 添加测试前后的抵押价值和借款价值列
     const headers = [
       '地址',
       '原健康度',
       '压力测试后健康度',
       '状态变化',
+      '测试前总抵押价值',
+      '测试前总借款价值',
+      '测试后总抵押价值',
+      '测试后总借款价值',
       '调整后抵押因子概要'
     ];
 
-    // 构建数据行
-    const dataRows = accountDetails.map(account => {
+    // 构建数据行 - 只使用有效账户
+    const dataRows = validAccounts.map(account => {
       const originalHealth = new BigNumber(account.health || 0).toNumber();
       const newHealth = calculateHealthWithAdjustedFactors(account);
       
@@ -182,6 +198,16 @@ const StressTestPage: React.FC<unknown> = () => {
       } else {
         statusChange = '保持安全';
       }
+
+      // 计算测试前的抵押价值和借款价值
+      const originalValues = calculateOriginalCollateralAndBorrowValues(account);
+      const originalCollateralValue = originalValues.collateralValue;
+      const originalBorrowValue = originalValues.borrowValue;
+
+      // 计算测试后的抵押价值和借款价值
+      const adjustedValues = calculateAdjustedCollateralAndBorrowValues(account);
+      const adjustedCollateralValue = adjustedValues.collateralValue;
+      const adjustedBorrowValue = adjustedValues.borrowValue;
 
       // 获取调整后的抵押因子概要
       const adjustedFactorSummary = Object.entries(adjustedFactors)
@@ -204,6 +230,10 @@ const StressTestPage: React.FC<unknown> = () => {
         originalHealth.toFixed(6),
         newHealth.toFixed(6),
         statusChange,
+        `$${originalCollateralValue.toFormat(2)}`,
+        `$${originalBorrowValue.toFormat(2)}`,
+        `$${adjustedCollateralValue.toFormat(2)}`,
+        `$${adjustedBorrowValue.toFormat(2)}`,
         adjustedFactorSummary
       ];
     });
@@ -217,7 +247,8 @@ const StressTestPage: React.FC<unknown> = () => {
       ['健康账户比例', `${testResult.healthyPercentage.toFixed(2)}%`],
       ['风险账户比例', `${testResult.unhealthyPercentage.toFixed(2)}%`],
       ['测试时间', new Date().toLocaleString()],
-      ['数据来源账户数', accountDetails.length]
+      ['有效账户数', validAccounts.length],
+      ['排除账户数', excludedCount]
     ];
 
     // 创建主工作表
@@ -226,10 +257,14 @@ const StressTestPage: React.FC<unknown> = () => {
     // 创建汇总工作表
     const summaryWorksheet = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryData]);
 
-    // 设置列宽
-    const colWidths = headers.map(header => ({
-      wch: Math.max(15, header.length + 2),
-    }));
+    // 设置列宽 - 调整新列的宽度
+    const colWidths = headers.map(header => {
+      // 对于价值列，设置更宽的宽度
+      if (header.includes('价值')) {
+        return { wch: Math.max(20, header.length + 5) };
+      }
+      return { wch: Math.max(15, header.length + 2) };
+    });
     mainWorksheet['!cols'] = colWidths;
 
     const summaryColWidths = summaryHeaders.map(header => ({
@@ -248,7 +283,29 @@ const StressTestPage: React.FC<unknown> = () => {
     // 写入文件并触发下载
     XLSX.writeFile(workbook, fileName);
 
-    message.success(`成功导出 ${accountDetails.length} 条压力测试结果到Excel`);
+    let successMsg = `成功导出 ${validAccounts.length} 条压力测试结果到Excel`;
+    if (excludedCount > 0) {
+      successMsg += ` (已排除${excludedCount}个supply全为0的账户)`;
+    }
+    message.success(successMsg);
+  };
+
+  // 检查账户是否所有币种的supply额度均为0
+  const hasNonZeroSupply = (account: API.AccountInfo): boolean => {
+    if (!account.tokens || account.tokens.length === 0) {
+      return false; // 没有代币数据，视为无效账户
+    }
+    
+    // 检查是否有至少一个代币的supply_balance_underlying > 0
+    return account.tokens.some(token => {
+      const supplyBalance = new BigNumber(token.supply_balance_underlying || 0);
+      return supplyBalance.gt(0); // 大于0
+    });
+  };
+
+  // 获取有效账户列表（排除所有币种supply额度均为0的账号）
+  const getValidAccounts = (): API.AccountInfo[] => {
+    return accountDetails.filter(account => hasNonZeroSupply(account));
   };
 
   // 使用调整后的抵押因子计算账户健康度
@@ -278,6 +335,60 @@ const StressTestPage: React.FC<unknown> = () => {
     }
 
     return totalBorrowValue.div(totalCollateralValue).toNumber();
+  };
+
+  // 计算测试前的总抵押价值和总借款价值
+  const calculateOriginalCollateralAndBorrowValues = (account: API.AccountInfo): { collateralValue: BigNumber, borrowValue: BigNumber } => {
+    let totalCollateralValue = new BigNumber(0);
+    let totalBorrowValue = new BigNumber(account.total_borrow_value || 0);
+
+    // 计算原始抵押总值（使用原始抵押因子）
+    account.tokens?.forEach(token => {
+      if (token.is_entered) {
+        const market = markets.find(m => m.token_address === token.token_address);
+        if (market) {
+          const originalFactor = parseFloat(market.collateral_factor);
+          const tokenValue = new BigNumber(token.supply_balance_underlying || 0)
+            .times(market.underlying_price || 1);
+          
+          // 应用原始抵押因子
+          const collateralValue = tokenValue.times(originalFactor);
+          totalCollateralValue = totalCollateralValue.plus(collateralValue);
+        }
+      }
+    });
+
+    return {
+      collateralValue: totalCollateralValue,
+      borrowValue: totalBorrowValue
+    };
+  };
+
+  // 计算测试后的总抵押价值和总借款价值
+  const calculateAdjustedCollateralAndBorrowValues = (account: API.AccountInfo): { collateralValue: BigNumber, borrowValue: BigNumber } => {
+    let totalCollateralValue = new BigNumber(0);
+    let totalBorrowValue = new BigNumber(account.total_borrow_value || 0);
+
+    // 计算调整后的抵押总值（使用调整后的抵押因子）
+    account.tokens?.forEach(token => {
+      if (token.is_entered) {
+        const market = markets.find(m => m.token_address === token.token_address);
+        if (market) {
+          const adjustedFactor = adjustedFactors[market.token_address] || parseFloat(market.collateral_factor) * 100;
+          const tokenValue = new BigNumber(token.supply_balance_underlying || 0)
+            .times(market.underlying_price || 1);
+          
+          // 应用调整后的抵押因子（需要除以100，因为adjustedFactor是百分比）
+          const collateralValue = tokenValue.times(adjustedFactor / 100);
+          totalCollateralValue = totalCollateralValue.plus(collateralValue);
+        }
+      }
+    });
+
+    return {
+      collateralValue: totalCollateralValue,
+      borrowValue: totalBorrowValue
+    };
   };
 
   // 市场列定义
@@ -366,6 +477,12 @@ const StressTestPage: React.FC<unknown> = () => {
     setTestResult(null);
     message.success(`已应用${scenario === 'mild' ? '轻度' : scenario === 'moderate' ? '中度' : '重度'}压力测试场景`);
   };
+
+  // 计算有效账户和统计数据
+  const validAccounts = getValidAccounts();
+  const totalAccounts = accountDetails.length;
+  const validCount = validAccounts.length;
+  const excludedCount = totalAccounts - validCount;
 
   return (
     <PageContainer
@@ -475,11 +592,18 @@ const StressTestPage: React.FC<unknown> = () => {
             </Col>
           </Row>
 
-          {/* 详细结果表格 */}
+          {/* 详细结果表格 - 只显示保持风险和转为风险的账户 */}
           <div style={{ marginTop: 24 }}>
-            <h3>详细结果</h3>
+            <h3>风险账户结果</h3>
             <Table
-              dataSource={accountDetails.slice(0, 10)} // 只显示前10个账户
+              dataSource={accountDetails.filter(record => {
+                const originalHealth = new BigNumber(record.health || 0).toNumber();
+                const newHealth = calculateHealthWithAdjustedFactors(record);
+                const wasHealthy = originalHealth < 1;
+                const isHealthy = newHealth < 1;
+                // 只显示保持风险或转为风险的账户
+                return (!isHealthy) || (wasHealthy && !isHealthy);
+              })}
               rowKey="address"
               columns={[
                 {
@@ -545,8 +669,6 @@ const StressTestPage: React.FC<unknown> = () => {
                     
                     if (wasHealthy && !isHealthy) {
                       return <Tag color="red">转为风险</Tag>;
-                    } else if (!wasHealthy && isHealthy) {
-                      return <Tag color="green">转为安全</Tag>;
                     } else if (!isHealthy) {
                       return <Tag color="orange">保持风险</Tag>;
                     } else {
@@ -564,25 +686,73 @@ const StressTestPage: React.FC<unknown> = () => {
                     const wasHealthyB = originalHealthB < 1;
                     const isHealthyB = newHealthB < 1;
                     
-                    // 排序规则：转为风险 > 保持风险 > 转为安全 > 保持安全
+                    // 排序规则：转为风险 > 保持风险
                     if (wasHealthyA && !isHealthyA) return -1; // 转为风险在前
                     if (wasHealthyB && !isHealthyB) return 1;
                     if (!isHealthyA) return -1; // 保持风险
                     if (!isHealthyB) return 1;
-                    if (!wasHealthyA && isHealthyA) return -1; // 转为安全
-                    if (!wasHealthyB && isHealthyB) return 1;
-                    return 0; // 保持安全
+                    return 0;
+                  },
+                  filters: [
+                    { text: '转为风险', value: '转为风险' },
+                    { text: '保持风险', value: '保持风险' },
+                  ],
+                  onFilter: (value, record) => {
+                    const originalHealth = new BigNumber(record.health || 0).toNumber();
+                    const newHealth = calculateHealthWithAdjustedFactors(record);
+                    const wasHealthy = originalHealth < 1;
+                    const isHealthy = newHealth < 1;
+                    
+                    if (value === '转为风险') {
+                      return wasHealthy && !isHealthy;
+                    } else if (value === '保持风险') {
+                      return !isHealthy;
+                    }
+                    return true;
+                  },
+                },
+                {
+                  title: '测试前抵押价值',
+                  width: 150,
+                  render: (_, record) => {
+                    const originalValues = calculateOriginalCollateralAndBorrowValues(record);
+                    return (
+                      <span style={{ fontWeight: 'bold', color: '#1890ff' }}>
+                        ${originalValues.collateralValue.toFormat(2)}
+                      </span>
+                    );
+                  },
+                  sorter: (a, b) => {
+                    const valuesA = calculateOriginalCollateralAndBorrowValues(a);
+                    const valuesB = calculateOriginalCollateralAndBorrowValues(b);
+                    return valuesA.collateralValue.minus(valuesB.collateralValue).toNumber();
+                  },
+                },
+                {
+                  title: '测试后抵押价值',
+                  width: 150,
+                  render: (_, record) => {
+                    const adjustedValues = calculateAdjustedCollateralAndBorrowValues(record);
+                    return (
+                      <span style={{ fontWeight: 'bold', color: '#52c41a' }}>
+                        ${adjustedValues.collateralValue.toFormat(2)}
+                      </span>
+                    );
+                  },
+                  sorter: (a, b) => {
+                    const valuesA = calculateAdjustedCollateralAndBorrowValues(a);
+                    const valuesB = calculateAdjustedCollateralAndBorrowValues(b);
+                    return valuesA.collateralValue.minus(valuesB.collateralValue).toNumber();
                   },
                 },
               ]}
-              pagination={false}
+              pagination={{
+                pageSize: 20,
+                showSizeChanger: true,
+                showQuickJumper: true,
+              }}
               size="small"
             />
-            {accountDetails.length > 10 && (
-              <p style={{ marginTop: 8, color: '#666', textAlign: 'center' }}>
-                仅显示前10个账户，共{accountDetails.length}个账户
-              </p>
-            )}
           </div>
         </ProCard>
       )}

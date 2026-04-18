@@ -8,7 +8,7 @@ import {
   ProTable,
   ProColumns,
 } from '@ant-design/pro-components';
-import { Button, Divider, Drawer, message, Progress, Space, Card, Row, Col, Statistic, Modal, Spin } from 'antd';
+import { Button, Divider, Drawer, message, Progress, Space, Card, Row, Col, Statistic, Modal, Spin, Input } from 'antd';
 import React, { useRef, useState, useEffect } from 'react';
 import { useModel } from '@umijs/max';
 import { BigNumber } from 'bignumber.js';
@@ -207,7 +207,19 @@ const UserAccountPage: React.FC<unknown> = () => {
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [globalLoading, setGlobalLoading] = useState(false);
+  const [filterText, setFilterText] = useState('');
   const actionRef = useRef<ActionType>();
+
+  // 过滤后的用户列表
+  const filteredUserList = React.useMemo(() => {
+    if (!filterText.trim()) {
+      return userList;
+    }
+    const searchText = filterText.toLowerCase().trim();
+    return userList.filter(user => 
+      user.address.toLowerCase().includes(searchText)
+    );
+  }, [userList, filterText]);
 
   // 表格列定义
   const columns: ProColumns<API.UserListItem>[] = [
@@ -634,6 +646,23 @@ const UserAccountPage: React.FC<unknown> = () => {
         </div>
       )}
 
+      {/* 地址过滤搜索框 */}
+      <div style={{ marginBottom: 16 }}>
+        <Input
+          placeholder="按地址过滤（输入部分地址字符）"
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+          allowClear
+          style={{ width: 400 }}
+          prefix={<span style={{ color: '#999' }}>搜索:</span>}
+        />
+        {filterText.trim() && (
+          <span style={{ marginLeft: 8, color: '#666', fontSize: '14px' }}>
+            已过滤到 {filteredUserList.length} 个用户
+          </span>
+        )}
+      </div>
+
       {/* 用户列表表格 */}
       <ProTable<API.UserListItem>
         headerTitle="用户列表"
@@ -642,7 +671,7 @@ const UserAccountPage: React.FC<unknown> = () => {
         loading={loading}
         search={false}
         toolBarRender={false}
-        dataSource={userList}
+        dataSource={filteredUserList}
         columns={columns}
         rowSelection={{
           selectedRowKeys: selectedRows.map(row => row.address),
