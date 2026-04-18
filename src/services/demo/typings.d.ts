@@ -41,7 +41,13 @@ declare namespace API {
   interface Result_string_ {
     success?: boolean;
     errorMessage?: string;
-    data?: string;
+    data?: string | string[];
+  }
+
+  interface Result_accounts_ {
+    success?: boolean;
+    errorMessage?: string;
+    accounts?: API.AccountInfo[];
   }
 
   type UserGenderEnum = 'MALE' | 'FEMALE';
@@ -148,7 +154,16 @@ declare namespace API {
   }
 
   interface AccountList{
-  accounts: string[];
-}
+    accounts: string[];
+  }
+
+  interface UserListItem {
+    address: string;
+    health?: string;
+    hasDetails: boolean;
+    net_asset_value?: string;
+    total_borrow_value?: string;
+    total_collateral_value?: string;
+  }
 }
 

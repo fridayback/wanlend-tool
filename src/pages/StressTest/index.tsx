@@ -10,6 +10,7 @@ import { Button, message, Space, Card, Row, Col, Statistic, InputNumber, Form, T
 import React, { useState, useEffect } from 'react';
 import { useModel } from '@umijs/max';
 import { BigNumber } from 'bignumber.js';
+import * as XLSX from 'xlsx';
 
 const { Statistic: ProStatistic } = StatisticCard;
 
@@ -26,28 +27,14 @@ interface StressTestResult {
 }
 
 const StressTestPage: React.FC<unknown> = () => {
-  const { marketsInfo } = useModel('global');
+  const { marketsInfo, accountDetails } = useModel('global');
   const [markets, setMarkets] = useState<MarketWithFactor[]>([]);
   const [adjustedFactors, setAdjustedFactors] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [testResult, setTestResult] = useState<StressTestResult | null>(null);
-  const [accountDetails, setAccountDetails] = useState<API.AccountInfo[]>([]);
-
-  // 从localStorage恢复所有数据
+  
+  // 从localStorage恢复压力测试相关数据（不恢复账户详情，使用全局状态）
   useEffect(() => {
-    // 恢复账户详情数据
-    const storedAccounts = localStorage.getItem('userAccountDetails');
-    if (storedAccounts) {
-      try {
-        const accounts = JSON.parse(storedAccounts);
-        if (Array.isArray(accounts)) {
-          setAccountDetails(accounts);
-        }
-      } catch (error) {
-        console.error('Failed to parse stored account details:', error);
-      }
-    }
-
     // 恢复调整后的抵押因子
     const storedAdjustedFactors = localStorage.getItem('stressTestAdjustedFactors');
     if (storedAdjustedFactors) {
@@ -154,6 +141,114 @@ const StressTestPage: React.FC<unknown> = () => {
       
       message.success(`压力测试完成: ${healthyCount}个健康账户, ${unhealthyCount}个风险账户`);
     }, 1000);
+  };
+
+  // 导出压力测试结果到Excel
+  const exportStressTestToExcel = () => {
+    if (accountDetails.length === 0) {
+      message.warning('没有数据可导出，请先获取用户详情数据');
+      return;
+    }
+
+    if (!testResult) {
+      message.warning('请先执行压力测试以生成结果');
+      return;
+    }
+
+    // 构建表头
+    const headers = [
+      '地址',
+      '原健康度',
+      '压力测试后健康度',
+      '状态变化',
+      '调整后抵押因子概要'
+    ];
+
+    // 构建数据行
+    const dataRows = accountDetails.map(account => {
+      const originalHealth = new BigNumber(account.health || 0).toNumber();
+      const newHealth = calculateHealthWithAdjustedFactors(account);
+      
+      const wasHealthy = originalHealth < 1;
+      const isHealthy = newHealth < 1;
+      
+      let statusChange = '';
+      if (wasHealthy && !isHealthy) {
+        statusChange = '转为风险';
+      } else if (!wasHealthy && isHealthy) {
+        statusChange = '转为安全';
+      } else if (!isHealthy) {
+        statusChange = '保持风险';
+      } else {
+        statusChange = '保持安全';
+      }
+
+      // 获取调整后的抵押因子概要
+      const adjustedFactorSummary = Object.entries(adjustedFactors)
+        .filter(([tokenAddress, factor]) => {
+          const market = markets.find(m => m.token_address === tokenAddress);
+          const originalFactor = market ? parseFloat(market.collateral_factor) * 100 : 100;
+          return Math.abs(factor - originalFactor) > 0.01; // 只显示有调整的因子
+        })
+        .map(([tokenAddress, factor]) => {
+          const market = markets.find(m => m.token_address === tokenAddress);
+          const symbol = market ? market.underlying_symbol : tokenAddress.slice(0, 8) + '...';
+          const originalFactor = market ? parseFloat(market.collateral_factor) * 100 : 100;
+          const change = ((factor - originalFactor) / originalFactor * 100).toFixed(1);
+          return `${symbol}:${factor.toFixed(1)}%(${change}%)`;
+        })
+        .join('; ') || '无调整';
+
+      return [
+        account.address,
+        originalHealth.toFixed(6),
+        newHealth.toFixed(6),
+        statusChange,
+        adjustedFactorSummary
+      ];
+    });
+
+    // 添加汇总信息作为单独的工作表
+    const summaryHeaders = ['项目', '数值'];
+    const summaryData = [
+      ['总账户数', testResult.totalAccounts],
+      ['健康账户数', testResult.healthyAccounts],
+      ['风险账户数', testResult.unhealthyAccounts],
+      ['健康账户比例', `${testResult.healthyPercentage.toFixed(2)}%`],
+      ['风险账户比例', `${testResult.unhealthyPercentage.toFixed(2)}%`],
+      ['测试时间', new Date().toLocaleString()],
+      ['数据来源账户数', accountDetails.length]
+    ];
+
+    // 创建主工作表
+    const mainWorksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+    
+    // 创建汇总工作表
+    const summaryWorksheet = XLSX.utils.aoa_to_sheet([summaryHeaders, ...summaryData]);
+
+    // 设置列宽
+    const colWidths = headers.map(header => ({
+      wch: Math.max(15, header.length + 2),
+    }));
+    mainWorksheet['!cols'] = colWidths;
+
+    const summaryColWidths = summaryHeaders.map(header => ({
+      wch: Math.max(20, header.length + 2),
+    }));
+    summaryWorksheet['!cols'] = summaryColWidths;
+
+    // 创建工作簿并添加工作表
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, mainWorksheet, '压力测试结果');
+    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, '测试汇总');
+
+    // 生成文件名
+    const fileName = `压力测试结果_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+    // 写入文件并触发下载
+    XLSX.writeFile(workbook, fileName);
+
+    message.success(`成功导出 ${accountDetails.length} 条压力测试结果到Excel`);
   };
 
   // 使用调整后的抵押因子计算账户健康度
@@ -331,6 +426,9 @@ const StressTestPage: React.FC<unknown> = () => {
             <Space>
               <Tag color="green">数据来源: {accountDetails.length}个用户账户</Tag>
               <Tag color="blue">测试时间: {new Date().toLocaleString()}</Tag>
+              <Button type="primary" onClick={exportStressTestToExcel}>
+                导出Excel
+              </Button>
             </Space>
           }
         >
@@ -391,6 +489,8 @@ const StressTestPage: React.FC<unknown> = () => {
                   render: (text) => (
                     <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{text}</span>
                   ),
+                  sorter: (a, b) => a.address.localeCompare(b.address),
+                  defaultSortOrder: 'ascend',
                 },
                 {
                   title: '原健康度',
@@ -407,6 +507,11 @@ const StressTestPage: React.FC<unknown> = () => {
                       </span>
                     );
                   },
+                  sorter: (a, b) => {
+                    const healthA = a.health ? new BigNumber(a.health).toNumber() : -1;
+                    const healthB = b.health ? new BigNumber(b.health).toNumber() : -1;
+                    return healthA - healthB;
+                  },
                 },
                 {
                   title: '压力测试后健康度',
@@ -421,6 +526,11 @@ const StressTestPage: React.FC<unknown> = () => {
                         {newHealth.toFixed(4)}
                       </span>
                     );
+                  },
+                  sorter: (a, b) => {
+                    const healthA = calculateHealthWithAdjustedFactors(a);
+                    const healthB = calculateHealthWithAdjustedFactors(b);
+                    return healthA - healthB;
                   },
                 },
                 {
@@ -442,6 +552,26 @@ const StressTestPage: React.FC<unknown> = () => {
                     } else {
                       return <Tag color="blue">保持安全</Tag>;
                     }
+                  },
+                  sorter: (a, b) => {
+                    const originalHealthA = new BigNumber(a.health || 0).toNumber();
+                    const newHealthA = calculateHealthWithAdjustedFactors(a);
+                    const originalHealthB = new BigNumber(b.health || 0).toNumber();
+                    const newHealthB = calculateHealthWithAdjustedFactors(b);
+                    
+                    const wasHealthyA = originalHealthA < 1;
+                    const isHealthyA = newHealthA < 1;
+                    const wasHealthyB = originalHealthB < 1;
+                    const isHealthyB = newHealthB < 1;
+                    
+                    // 排序规则：转为风险 > 保持风险 > 转为安全 > 保持安全
+                    if (wasHealthyA && !isHealthyA) return -1; // 转为风险在前
+                    if (wasHealthyB && !isHealthyB) return 1;
+                    if (!isHealthyA) return -1; // 保持风险
+                    if (!isHealthyB) return 1;
+                    if (!wasHealthyA && isHealthyA) return -1; // 转为安全
+                    if (!wasHealthyB && isHealthyB) return 1;
+                    return 0; // 保持安全
                   },
                 },
               ]}

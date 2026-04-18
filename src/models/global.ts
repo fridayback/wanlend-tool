@@ -12,19 +12,25 @@ const global = () => {
   const [blockNumber, setBlockNumber] = useState<Number>(0);
   const [marketsInfo, setMarketsInfo] = useState<Map<string, API.MarketInfo>>(new Map());
 
-  const [accountInfo, setAccountInfo] = useState<API.AccountInfo>({});
+  const [accountInfo, setAccountInfo] = useState<API.AccountInfo | undefined>();
   const [menuList, setMenuList] = useState<API.MenuItemInfo[]>([]);
+  
+  // 全局用户列表状态
+  const [userList, setUserList] = useState<API.UserListItem[]>([]);
+  // 全局账户详情状态
+  const [accountDetails, setAccountDetails] = useState<API.AccountInfo[]>([]);
 
   useEffect(() => {
-    UserController.UserController.getMarkets({}).then((res) => {
+    UserController.UserController.getMarkets(undefined).then((res: any) => {
       console.log(res);
       let data = new Map<string, API.MarketInfo>();
-      let menuItemInfo = [];
-      res.markets.forEach((item: API.MarketInfo) => {
-        data.set(item.token_address, item);
-        menuItemInfo.push({ key: item.token_address, name: item.underlying_symbol });
+      let menuItemInfo: API.MenuItemInfo[] = [];
+      if (res && res.markets) {
+        res.markets.forEach((item: API.MarketInfo) => {
+          data.set(item.token_address, item);
+          menuItemInfo.push({ key: item.token_address, name: item.underlying_symbol });
+        });
       }
-      );
       menuItemInfo = menuItemInfo.sort((a,b)=>{
         if(a.name == 'WAN') return -1;
         if(b.name == 'WAN') return 1;
@@ -40,9 +46,9 @@ const global = () => {
   }, [blockNumber]);
 
   useEffect(() => {
-    UserController.UserController.getAccount({ addresses: ["0x1d1e18e1a484d0a10623661546ba97defab7a7ae"] }).then((res) => {
+    UserController.UserController.getAccount({ addresses: ["0x1d1e18e1a484d0a10623661546ba97defab7a7ae"] }).then((res: API.Result_accounts_) => {
       // console.log('Account =', res);
-      let data = res.accounts.length > 0 ? res.accounts[0] : undefined;
+      let data = res?.accounts && res.accounts.length > 0 ? res.accounts[0] : undefined;
 
       // for (let i = 0; i < data.tokens.length; i++) {
       //   const token = data.tokens[i];
@@ -64,6 +70,11 @@ const global = () => {
     setMarketsInfo,
     menuList, 
     setMenuList,
+    // 全局用户状态
+    userList,
+    setUserList,
+    accountDetails,
+    setAccountDetails,
   };
 };
 

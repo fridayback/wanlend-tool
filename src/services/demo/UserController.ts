@@ -125,14 +125,14 @@ export async function getAccount(
   const { addresses: id } = params;
   if (id) {
     // console.log('======================> 3',JSON.stringify(id));
-    return request<API.Result_string_>(`/api/account`, {
+    return request<API.Result_accounts_>(`/api/account`, {
       method: 'GET',
       params: { addresses: JSON.stringify(id) },
       ...(options || {}),
     });
   } else {
     // console.log('======================> 4');
-    return request<API.Result_string_>(`/api/account`, {
+    return request<API.Result_accounts_>(`/api/account`, {
       method: 'GET',
       params: { ...params },
       ...(options || {}),

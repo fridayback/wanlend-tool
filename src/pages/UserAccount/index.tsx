@@ -75,7 +75,7 @@ const handleGetAllAccountDetails = async (
   allAddresses: string[],
   onProgress: (current: number, total: number) => void
 ) => {
-  const batchSize = 50; // 每批次请求50个地址
+  const batchSize = 100; // 每批次请求100个地址
   const total = allAddresses.length;
   let allAccounts: API.AccountInfo[] = [];
 
@@ -99,64 +99,6 @@ const handleGetAllAccountDetails = async (
 };
 
 /**
- * 导出CSV文件
- */
-const exportToCSV = (accounts: API.AccountInfo[], marketsInfo: Map<string, API.MarketInfo>) => {
-  if (!accounts || accounts.length === 0) {
-    message.warning('没有数据可导出');
-    return;
-  }
-
-  // CSV头部
-  const headers = [
-    '地址',
-    '健康度',
-    '净资产值',
-    '借款总值',
-    '抵押总值',
-    '挖矿奖励',
-    '奖励地址',
-    '奖励余额',
-    '时间戳'
-  ];
-
-  // 构建CSV内容
-  const rows = accounts.map(account => {
-    const healthValue = new BigNumber(account.health || 0).toFixed(4);
-    const netAssetValue = new BigNumber(account.net_asset_value || 0).toFixed(4);
-    const totalBorrowValue = new BigNumber(account.total_borrow_value || 0).toFixed(4);
-    const totalCollateralValue = new BigNumber(account.total_collateral_value || 0).toFixed(4);
-
-    return [
-      account.address,
-      healthValue,
-      netAssetValue,
-      totalBorrowValue,
-      totalCollateralValue,
-      account.comp_reward || '0',
-      account.rewardAddress || '',
-      account.rewardBalance || '0',
-      new Date(account.timestamp || 0).toLocaleString()
-    ].map(field => `"${field}"`).join(',');
-  });
-
-  const csvContent = [headers.join(','), ...rows].join('\n');
-
-  // 创建下载链接
-  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', `用户账户详情_${new Date().toISOString().slice(0, 10)}.csv`);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  message.success(`成功导出 ${accounts.length} 条记录`);
-};
-
-/**
  * 导出Excel文件
  */
 const exportToExcel = (accounts: API.AccountInfo[], marketsInfo: Map<string, API.MarketInfo>) => {
@@ -167,7 +109,7 @@ const exportToExcel = (accounts: API.AccountInfo[], marketsInfo: Map<string, API
 
   // 从marketsInfo中获取所有代币，按市场列表顺序排列
   const marketList = Array.from(marketsInfo.values());
-  
+
   if (marketList.length === 0) {
     message.warning('没有市场数据可导出');
     return;
@@ -183,7 +125,7 @@ const exportToExcel = (accounts: API.AccountInfo[], marketsInfo: Map<string, API
 
   // 构建表头
   const baseHeaders = ['地址', '健康值'];
-  
+
   // 为每个代币添加4个列（移除价格和抵押因子列）
   const tokenHeaders = tokenInfoList.flatMap(token => [
     `${token.symbol}_借款数量`,
@@ -204,7 +146,7 @@ const exportToExcel = (accounts: API.AccountInfo[], marketsInfo: Map<string, API
     // 为每个代币添加数据（只保留4个值）
     const tokenData = tokenInfoList.flatMap(tokenInfo => {
       const token = account.tokens?.find(t => t.token_address === tokenInfo.tokenAddress);
-      
+
       if (!token) {
         // 如果该用户没有这个代币，返回空值
         return ['0', '0', '0', '0'];
@@ -212,10 +154,10 @@ const exportToExcel = (accounts: API.AccountInfo[], marketsInfo: Map<string, API
 
       const borrowBalance = new BigNumber(token.borrow_balance_underlying || 0);
       const supplyBalance = new BigNumber(token.supply_balance_underlying || 0);
-      
+
       // 计算借款价值：借款数量 × 代币价格
       const borrowValue = borrowBalance.times(tokenInfo.price);
-      
+
       // 计算抵押价值：供应数量 × 代币价格 × 抵押因子
       const collateralValue = supplyBalance.times(tokenInfo.price).times(tokenInfo.collateralFactor);
 
@@ -232,7 +174,7 @@ const exportToExcel = (accounts: API.AccountInfo[], marketsInfo: Map<string, API
 
   // 创建工作簿和工作表
   const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-  
+
   // 设置列宽
   const colWidths = headers.map(header => ({
     wch: Math.max(15, header.length + 2), // 最小宽度15，根据标题长度调整
@@ -244,27 +186,22 @@ const exportToExcel = (accounts: API.AccountInfo[], marketsInfo: Map<string, API
 
   // 生成文件名
   const fileName = `用户账户详情_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  
+
   // 写入文件并触发下载
   XLSX.writeFile(workbook, fileName);
 
   message.success(`成功导出 ${accounts.length} 条记录到Excel`);
 };
 
-interface UserListItem {
-  address: string;
-  health?: string;
-  hasDetails: boolean;
-  net_asset_value?: string;
-  total_borrow_value?: string;
-  total_collateral_value?: string;
-}
-
 const UserAccountPage: React.FC<unknown> = () => {
-  const { marketsInfo } = useModel('global');
-  const [userList, setUserList] = useState<UserListItem[]>([]);
-  const [selectedRows, setSelectedRows] = useState<UserListItem[]>([]);
-  const [accountDetails, setAccountDetails] = useState<API.AccountInfo[]>([]);
+  const { 
+    marketsInfo, 
+    userList, 
+    setUserList, 
+    accountDetails, 
+    setAccountDetails 
+  } = useModel('global');
+  const [selectedRows, setSelectedRows] = useState<API.UserListItem[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<API.AccountInfo>();
   const [loading, setLoading] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
@@ -272,50 +209,8 @@ const UserAccountPage: React.FC<unknown> = () => {
   const [globalLoading, setGlobalLoading] = useState(false);
   const actionRef = useRef<ActionType>();
 
-  // 从localStorage恢复数据
-  useEffect(() => {
-    // 恢复userList
-    const storedUserList = localStorage.getItem('userAccountUserList');
-    if (storedUserList) {
-      try {
-        const parsedList = JSON.parse(storedUserList);
-        if (Array.isArray(parsedList)) {
-          setUserList(parsedList);
-        }
-      } catch (error) {
-        console.error('Failed to parse stored user list:', error);
-      }
-    }
-
-    // 恢复accountDetails
-    const storedAccountDetails = localStorage.getItem('userAccountDetails');
-    if (storedAccountDetails) {
-      try {
-        const parsedDetails = JSON.parse(storedAccountDetails);
-        if (Array.isArray(parsedDetails)) {
-          setAccountDetails(parsedDetails);
-        }
-      } catch (error) {
-        console.error('Failed to parse stored account details:', error);
-      }
-    }
-
-    // 恢复selectedRows（可选，通常不需要恢复选中状态）
-    const storedSelectedRows = localStorage.getItem('userAccountSelectedRows');
-    if (storedSelectedRows) {
-      try {
-        const parsedRows = JSON.parse(storedSelectedRows);
-        if (Array.isArray(parsedRows)) {
-          setSelectedRows(parsedRows);
-        }
-      } catch (error) {
-        console.error('Failed to parse stored selected rows:', error);
-      }
-    }
-  }, []);
-
   // 表格列定义
-  const columns: ProColumns<UserListItem>[] = [
+  const columns: ProColumns<API.UserListItem>[] = [
     {
       title: '地址',
       dataIndex: 'address',
@@ -324,6 +219,8 @@ const UserAccountPage: React.FC<unknown> = () => {
       render: (text) => (
         <span style={{ fontFamily: 'monospace' }}>{text}</span>
       ),
+      sorter: (a, b) => a.address.localeCompare(b.address),
+      defaultSortOrder: 'ascend',
     },
     {
       title: '健康度',
@@ -343,6 +240,11 @@ const UserAccountPage: React.FC<unknown> = () => {
           </span>
         );
       },
+      sorter: (a, b) => {
+        const healthA = a.health ? new BigNumber(a.health).toNumber() : -1;
+        const healthB = b.health ? new BigNumber(b.health).toNumber() : -1;
+        return healthA - healthB;
+      },
     },
     {
       title: '详情状态',
@@ -354,6 +256,7 @@ const UserAccountPage: React.FC<unknown> = () => {
           {record.hasDetails ? '已获取' : '未获取'}
         </span>
       ),
+      sorter: (a, b) => (a.hasDetails === b.hasDetails ? 0 : a.hasDetails ? 1 : -1),
     },
     {
       title: '操作',
@@ -386,6 +289,11 @@ const UserAccountPage: React.FC<unknown> = () => {
     const result = await handleGetAllAccounts();
     // console.log('用户列表result =', result);
     if (result) {
+      // 获取成功后才清除之前的所有用户数据
+      setUserList([]);
+      setAccountDetails([]);
+      setSelectedRows([]);
+      
       // 只提取地址和健康度信息用于显示
       const users = Array.isArray(result) ? result.map((account: string) => ({
         address: account,
@@ -393,16 +301,9 @@ const UserAccountPage: React.FC<unknown> = () => {
         hasDetails: false // 标记为未获取详情
       })) : [];
       setUserList(users);
-      
-      // 保存到localStorage
-      try {
-        localStorage.setItem('userAccountUserList', JSON.stringify(users));
-      } catch (error) {
-        console.error('Failed to save user list to localStorage:', error);
-      }
-      
+
       // 清空accountDetails，因为获取用户列表时得到的是不完整数据
-      const allDetails = users.map((user: UserListItem) => ({
+      const allDetails = users.map((user: API.UserListItem) => ({
         address: user.address,
         health: '-',
         net_asset_value: '0',
@@ -416,10 +317,7 @@ const UserAccountPage: React.FC<unknown> = () => {
         hasDetails: false,
       }));
       setAccountDetails(allDetails);
-      
-      // 清空选中状态
-      setSelectedRows([]);
-      
+
       message.success(`成功获取 ${users.length} 个用户地址`);
     }
     setLoading(false);
@@ -468,24 +366,10 @@ const UserAccountPage: React.FC<unknown> = () => {
       setAccountDetails(updatedDetails);
       console.log('更新后的账户详情 =', updatedDetails);
       setUserList(updatedUserList);
-      
-      // 保存userList到localStorage
-      try {
-        localStorage.setItem('userAccountUserList', JSON.stringify(updatedUserList));
-      } catch (error) {
-        console.error('Failed to save user list to localStorage:', error);
-      }
-
-      // 保存到localStorage供压力测试页面使用
-      try {
-        localStorage.setItem('userAccountDetails', JSON.stringify(updatedDetails));
-      } catch (error) {
-        console.error('Failed to save account details to localStorage:', error);
-      }
 
       // 获取详情后清空选中状态
       setSelectedRows([]);
-      
+
       message.success(`成功获取 ${result.length} 个用户详情，已清空选中状态`);
     }
     setLoading(false);
@@ -514,7 +398,7 @@ const UserAccountPage: React.FC<unknown> = () => {
     if (allAccounts.length > 0) {
       // 更新账户详情
       setAccountDetails(allAccounts);
-      
+
       // 更新userList中的hasDetails状态和健康度等信息
       const updatedUserList = [...userList];
       allAccounts.forEach((account: API.AccountInfo) => {
@@ -530,22 +414,8 @@ const UserAccountPage: React.FC<unknown> = () => {
           };
         }
       });
-      
+
       setUserList(updatedUserList);
-      
-      // 保存userList到localStorage
-      try {
-        localStorage.setItem('userAccountUserList', JSON.stringify(updatedUserList));
-      } catch (error) {
-        console.error('Failed to save user list to localStorage:', error);
-      }
-      
-      // 保存到localStorage供压力测试页面使用
-      try {
-        localStorage.setItem('userAccountDetails', JSON.stringify(allAccounts));
-      } catch (error) {
-        console.error('Failed to save account details to localStorage:', error);
-      }
 
       message.success(`成功获取所有 ${allAccounts.length} 个用户详情`);
     }
@@ -555,13 +425,67 @@ const UserAccountPage: React.FC<unknown> = () => {
     setGlobalLoading(false);
   };
 
-  // 导出CSV数据
+  // 导出CSV数据（保留旧功能）
   const handleExportCSV = () => {
     if (accountDetails.length === 0) {
       message.warning('没有可导出的数据，请先获取用户详情');
       return;
     }
-    exportToCSV(accountDetails, marketsInfo);
+    // 临时实现一个简单的CSV导出
+    exportSimpleCSV(accountDetails);
+  };
+  
+  // 简单的CSV导出函数
+  const exportSimpleCSV = (accounts: API.AccountInfo[]) => {
+    if (!accounts || accounts.length === 0) {
+      message.warning('没有数据可导出');
+      return;
+    }
+
+    const headers = [
+      '地址',
+      '健康度',
+      '净资产值',
+      '借款总值',
+      '抵押总值',
+      '挖矿奖励',
+      '奖励地址',
+      '奖励余额',
+      '时间戳'
+    ];
+
+    const rows = accounts.map(account => {
+      const healthValue = new BigNumber(account.health || 0).toFixed(4);
+      const netAssetValue = new BigNumber(account.net_asset_value || 0).toFixed(4);
+      const totalBorrowValue = new BigNumber(account.total_borrow_value || 0).toFixed(4);
+      const totalCollateralValue = new BigNumber(account.total_collateral_value || 0).toFixed(4);
+
+      return [
+        account.address,
+        healthValue,
+        netAssetValue,
+        totalBorrowValue,
+        totalCollateralValue,
+        account.comp_reward || '0',
+        account.rewardAddress || '',
+        account.rewardBalance || '0',
+        new Date(account.timestamp || 0).toLocaleString()
+      ].map(field => `"${field}"`).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `用户账户详情_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    message.success(`成功导出 ${accounts.length} 条CSV记录`);
   };
 
   // 导出Excel数据
@@ -595,7 +519,7 @@ const UserAccountPage: React.FC<unknown> = () => {
     unhealthyUsers: Number(stats.unhealthyUsers) || 0,
     totalDetails: Number(stats.totalDetails) || 0,
   };
-  
+
 
   return (
     <PageContainer
@@ -711,7 +635,7 @@ const UserAccountPage: React.FC<unknown> = () => {
       )}
 
       {/* 用户列表表格 */}
-      <ProTable<UserListItem>
+      <ProTable<API.UserListItem>
         headerTitle="用户列表"
         actionRef={actionRef}
         rowKey="address"
