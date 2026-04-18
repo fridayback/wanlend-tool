@@ -8,7 +8,7 @@ import {
   ProTable,
   ProColumns,
 } from '@ant-design/pro-components';
-import { Button, Divider, Drawer, message, Progress, Space, Card, Row, Col, Statistic } from 'antd';
+import { Button, Divider, Drawer, message, Progress, Space, Card, Row, Col, Statistic, Modal, Spin } from 'antd';
 import React, { useRef, useState, useEffect } from 'react';
 import { useModel } from '@umijs/max';
 import { BigNumber } from 'bignumber.js';
@@ -75,7 +75,7 @@ const handleGetAllAccountDetails = async (
   allAddresses: string[],
   onProgress: (current: number, total: number) => void
 ) => {
-  const batchSize = 20; // 每批次请求20个地址
+  const batchSize = 50; // 每批次请求50个地址
   const total = allAddresses.length;
   let allAccounts: API.AccountInfo[] = [];
 
@@ -269,6 +269,7 @@ const UserAccountPage: React.FC<unknown> = () => {
   const [loading, setLoading] = useState(false);
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [globalLoading, setGlobalLoading] = useState(false);
   const actionRef = useRef<ActionType>();
 
   // 从localStorage恢复数据
@@ -380,9 +381,10 @@ const UserAccountPage: React.FC<unknown> = () => {
 
   // 获取用户列表 - 只获取地址列表，不保存不完整的账户信息
   const handleGetUserList = async () => {
+    setGlobalLoading(true);
     setLoading(true);
     const result = await handleGetAllAccounts();
-    console.log('用户列表result =', result);
+    // console.log('用户列表result =', result);
     if (result) {
       // 只提取地址和健康度信息用于显示
       const users = Array.isArray(result) ? result.map((account: string) => ({
@@ -421,6 +423,7 @@ const UserAccountPage: React.FC<unknown> = () => {
       message.success(`成功获取 ${users.length} 个用户地址`);
     }
     setLoading(false);
+    setGlobalLoading(false);
   };
 
   // 获取选中用户的详情
@@ -430,6 +433,7 @@ const UserAccountPage: React.FC<unknown> = () => {
       return;
     }
 
+    setGlobalLoading(true);
     setLoading(true);
     const addresses = selectedRows.map(row => row.address);
     const result = await handleGetAccountDetails(addresses);
@@ -485,6 +489,7 @@ const UserAccountPage: React.FC<unknown> = () => {
       message.success(`成功获取 ${result.length} 个用户详情，已清空选中状态`);
     }
     setLoading(false);
+    setGlobalLoading(false);
   };
 
   // 批量获取所有用户详情
@@ -494,6 +499,7 @@ const UserAccountPage: React.FC<unknown> = () => {
       return;
     }
 
+    setGlobalLoading(true);
     setBatchLoading(true);
     setBatchProgress({ current: 0, total: userList.length });
 
@@ -506,12 +512,47 @@ const UserAccountPage: React.FC<unknown> = () => {
     );
 
     if (allAccounts.length > 0) {
+      // 更新账户详情
       setAccountDetails(allAccounts);
+      
+      // 更新userList中的hasDetails状态和健康度等信息
+      const updatedUserList = [...userList];
+      allAccounts.forEach((account: API.AccountInfo) => {
+        const userIndex = updatedUserList.findIndex(user => user.address === account.address);
+        if (userIndex >= 0) {
+          updatedUserList[userIndex] = {
+            ...updatedUserList[userIndex],
+            hasDetails: true,
+            health: account.health,
+            net_asset_value: account.net_asset_value,
+            total_borrow_value: account.total_borrow_value,
+            total_collateral_value: account.total_collateral_value,
+          };
+        }
+      });
+      
+      setUserList(updatedUserList);
+      
+      // 保存userList到localStorage
+      try {
+        localStorage.setItem('userAccountUserList', JSON.stringify(updatedUserList));
+      } catch (error) {
+        console.error('Failed to save user list to localStorage:', error);
+      }
+      
+      // 保存到localStorage供压力测试页面使用
+      try {
+        localStorage.setItem('userAccountDetails', JSON.stringify(allAccounts));
+      } catch (error) {
+        console.error('Failed to save account details to localStorage:', error);
+      }
+
       message.success(`成功获取所有 ${allAccounts.length} 个用户详情`);
     }
 
     setBatchLoading(false);
     setBatchProgress({ current: 0, total: 0 });
+    setGlobalLoading(false);
   };
 
   // 导出CSV数据
@@ -562,6 +603,22 @@ const UserAccountPage: React.FC<unknown> = () => {
         title: '用户账户管理',
       }}
     >
+      {/* 全局加载遮罩 */}
+      <Modal
+        open={globalLoading}
+        footer={null}
+        closable={false}
+        centered
+        maskClosable={false}
+        width={300}
+        bodyStyle={{ textAlign: 'center', padding: '40px 0' }}
+      >
+        <Spin size="large" />
+        <div style={{ marginTop: 20, fontSize: 16, color: '#1890ff' }}>
+          处理中，请稍候...
+        </div>
+      </Modal>
+
       {/* 统计卡片 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={6}>
